@@ -2,15 +2,20 @@ pipeline {
     agent any
 
     environment {
+        // Docker Image & Tagging
         IMAGE_NAME = "flask-postgres-app"
         TAG_NAME = "${env.BUILD_NUMBER}"
-        // Keeping "my-network" as the custom name, which is created below
-        NETWORK_NAME = "my-network" 
+        
+        // Docker Networking & Container Names
+        NETWORK_NAME = "my-network"
         DB_CONTAINER = "postgres-db"
         APP_CONTAINER = "flask-app"
+        
+        // Database Credentials
         POSTGRES_DB = "app_db"
         POSTGRES_USER = "admin"
         POSTGRES_PASSWORD = "admin"
+        // POSTGRES_HOST is implicitly DB_CONTAINER (postgres-db) due to network usage
     }
 
     stages {
@@ -31,15 +36,16 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 echo "Creating Docker network if it doesn't exist..."
-                // Create the network once
+                // Create the custom network
                 sh "docker network inspect ${NETWORK_NAME} >/dev/null 2>&1 || docker network create ${NETWORK_NAME}"
                 
-                echo "Starting PostgreSQL container..."
+                echo "Starting PostgreSQL container on ${NETWORK_NAME}..."
                 sh '''
-                    // Stop/Remove existing container FIRST to ensure a fresh start on the new network
+                    # FIX: Use # for comments in shell scripts (resolved previous 'Permission denied' error)
+                    # Stop/Remove existing container FIRST to ensure a fresh start on the new network
                     docker rm -f ${DB_CONTAINER} || true
                     
-                    // Start on the explicitly created network
+                    # Start on the explicitly created network
                     docker run -d \
                         --name ${DB_CONTAINER} \
                         --network ${NETWORK_NAME} \
@@ -49,7 +55,7 @@ pipeline {
                         -p 5432:5432 \
                         postgres:13
                 '''
-                // CRITICAL FIX: Wait for the database service to fully start and accept connections
+                // CRITICAL: Wait for the database service to fully start and accept connections
                 echo "Waiting 10 seconds for PostgreSQL to initialize..."
                 sleep 10
             }
@@ -76,6 +82,7 @@ pipeline {
             steps {
                 echo "Deploying Flask app container..."
                 sh '''
+                    # FIX: Use # for comments in shell scripts
                     docker rm -f ${APP_CONTAINER} || true
                     docker run -d \
                         --name ${APP_CONTAINER} \
@@ -87,8 +94,14 @@ pipeline {
                         -p 5000:5000 \
                         ${IMAGE_NAME}:${TAG_NAME}
                 '''
-                echo "✅ Flask app deployed. Try accessing: http://<YOUR_PWD_EXTERNAL_IP>:5000"
+                echo "✅ Flask app deployed on port 5000. Access via the Play With Docker (PWD) 5000 port link."
             }
+        }
+    }
+
+    post {
+        always {
+            echo 'Pipeline finished. Containers are left running for access and debugging.'
         }
     }
 }
