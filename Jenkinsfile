@@ -4,7 +4,8 @@ pipeline {
     environment {
         IMAGE_NAME = "flask-postgres-app"
         TAG_NAME = "${env.BUILD_NUMBER}"
-        NETWORK_NAME = "my-network"
+        // Keeping "my-network" as the custom name, which is created below
+        NETWORK_NAME = "my-network" 
         DB_CONTAINER = "postgres-db"
         APP_CONTAINER = "flask-app"
         POSTGRES_DB = "app_db"
@@ -27,18 +28,18 @@ pipeline {
             }
         }
 
-        stage('Create Network') {
+        stage('Setup Environment') {
             steps {
                 echo "Creating Docker network if it doesn't exist..."
+                // Create the network once
                 sh "docker network inspect ${NETWORK_NAME} >/dev/null 2>&1 || docker network create ${NETWORK_NAME}"
-            }
-        }
-
-        stage('Start PostgreSQL') {
-            steps {
+                
                 echo "Starting PostgreSQL container..."
                 sh '''
+                    // Stop/Remove existing container FIRST to ensure a fresh start on the new network
                     docker rm -f ${DB_CONTAINER} || true
+                    
+                    // Start on the explicitly created network
                     docker run -d \
                         --name ${DB_CONTAINER} \
                         --network ${NETWORK_NAME} \
@@ -48,6 +49,9 @@ pipeline {
                         -p 5432:5432 \
                         postgres:13
                 '''
+                // CRITICAL FIX: Wait for the database service to fully start and accept connections
+                echo "Waiting 10 seconds for PostgreSQL to initialize..."
+                sleep 10
             }
         }
 
@@ -87,13 +91,4 @@ pipeline {
             }
         }
     }
-
-    post {
-        always {
-            echo 'Cleaning up dangling containers (if any failed mid-pipeline)...'
-            // Optionally clean up containers
-            // sh "docker rm -f ${APP_CONTAINER} ${DB_CONTAINER} || true"
-        }
-    }
 }
-
