@@ -6,23 +6,23 @@ pipeline {
         // Build image will be tagged with the build number
         IMAGE_NAME = "flask-postgres-app"
         TAG_NAME = "${env.BUILD_NUMBER}"
+        // CRITICAL: Set the Docker network name. 
+        // Based on your previous 'docker ps' output, 'bridge' is the most common default
+        // if you didn't create a custom one. Adjust if necessary (e.g., 'myproject_default').
+        NETWORK_NAME = "bridge" 
     }
 
     stages {
         stage('Declarative: Checkout SCM') {
             steps {
                 echo 'Checking out source code...'
-                // The actual checkout happens here implicitly or explicitly.
-                // Added a no-op step for clarity.
             }
         }
         
         stage('Build Docker Image') {
             steps {
                 script {
-                    // FIX: This command correctly handles the Dockerfile in the 'app' subdirectory.
-                    // -f app/Dockerfile: specifies the Dockerfile's path (relative to repo root).
-                    // app: sets the build context to the 'app' directory, which is needed for 'COPY' commands.
+                    // Correctly specifies Dockerfile path and build context
                     sh "docker build -t ${IMAGE_NAME}:${TAG_NAME} -f app/Dockerfile app"
                 }
             }
@@ -31,9 +31,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // FIX: Added -e PYTHONPATH=. to resolve 'ModuleNotFoundError: No module named 'app'' 
-                    // This allows Python to find 'app.py' and other modules in the current directory (/app).
-                    // 'pytest tests' is used because 'tests' is at the root of the /app directory inside the container.
+                    // Added -e PYTHONPATH=. to resolve Python import errors
                     sh "docker run --rm -e POSTGRES_HOST=postgres-db -e POSTGRES_DB=app_db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin -e PYTHONPATH=. ${IMAGE_NAME}:${TAG_NAME} pytest tests"
                 }
             }
@@ -41,7 +39,19 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo "Deployment logic goes here..."
+                script {
+                    echo "Stopping and removing existing application container 'flask-app'..."
+                    // Stop and remove the previous container instance (|| true allows the step to pass if the container doesn't exist)
+                    sh "docker stop flask-app || true" 
+                    sh "docker rm flask-app || true"
+                    
+                    echo "Starting the new application container..."
+                    // Launch the container in detached mode (-d), map the port (-p),
+                    // and connect to the database network (--network)
+                    sh "docker run -d --name flask-app -p 5000:5000 --network ${NETWORK_NAME} -e POSTGRES_HOST=postgres-db -e POSTGRES_DB=app_db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin ${IMAGE_NAME}:${TAG_NAME}"
+                    
+                    echo "Deployment complete! Check http://192.168.0.14:5000/"
+                }
             }
         }
     }
