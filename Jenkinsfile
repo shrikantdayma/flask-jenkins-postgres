@@ -43,7 +43,8 @@ pipeline {
             steps {
                 script {
                     // Stop existing container if running
-                    sh "docker rm -f ${FLASK_CONTAINER} || true"
+                    sh "docker run --rm ... flask-postgres-app pytest tests
+ || true"
                     // Run app container
                     sh """
                         docker run -d \
