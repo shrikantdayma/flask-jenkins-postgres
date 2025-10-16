@@ -11,18 +11,18 @@ pipeline {
     stages {
         stage('Declarative: Checkout SCM') {
             steps {
-                // Initial checkout is done automatically by Declarative Pipeline
-                // Adding a placeholder step for clarity
                 echo 'Checking out source code...'
+                // The actual checkout happens here implicitly or explicitly.
+                // Added a no-op step for clarity.
             }
         }
         
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Fix: We run this from the repo root.
-                    // -f app/Dockerfile: specifies the Dockerfile's location
-                    // app: sets the build context to the 'app' directory, which is needed for 'COPY' commands inside the Dockerfile
+                    // FIX: This command correctly handles the Dockerfile in the 'app' subdirectory.
+                    // -f app/Dockerfile: specifies the Dockerfile's path (relative to repo root).
+                    // app: sets the build context to the 'app' directory, which is needed for 'COPY' commands.
                     sh "docker build -t ${IMAGE_NAME}:${TAG_NAME} -f app/Dockerfile app"
                 }
             }
@@ -31,10 +31,10 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Fix from previous errors: Test runner needs to use the correct directory.
-                    // The Dockerfile WORKDIR is /app, and files were copied relative to the context (app/).
-                    // Therefore, tests are at /app/tests inside the container.
-                    sh "docker run --rm -e POSTGRES_HOST=postgres-db -e POSTGRES_DB=app_db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin ${IMAGE_NAME}:${TAG_NAME} pytest tests"
+                    // FIX: Added -e PYTHONPATH=. to resolve 'ModuleNotFoundError: No module named 'app'' 
+                    // This allows Python to find 'app.py' and other modules in the current directory (/app).
+                    // 'pytest tests' is used because 'tests' is at the root of the /app directory inside the container.
+                    sh "docker run --rm -e POSTGRES_HOST=postgres-db -e POSTGRES_DB=app_db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin -e PYTHONPATH=. ${IMAGE_NAME}:${TAG_NAME} pytest tests"
                 }
             }
         }
