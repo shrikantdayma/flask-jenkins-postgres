@@ -2,72 +2,75 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'flask-postgres-app'
-        DOCKER_TAG = 'latest'
-        DOCKER_IMAGE = "${IMAGE_NAME}:${DOCKER_TAG}"
+        IMAGE_NAME = "flask-postgres-app"
+        CONTAINER_NAME = "flask-postgres-app"
+        POSTGRES_CONTAINER = "postgres-db"
+        POSTGRES_DB = "app_db"
+        POSTGRES_USER = "admin"
+        POSTGRES_PASSWORD = "admin"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                // Explicit Git checkout to avoid branch issues
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/shrikantdayma/flask-jenkins-postgres'
-                    ]]
-                ])
+                git 'https://github.com/shrikantdayma/flask-jenkins-postgres'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 dir('app') {
-                    script {
-                        sh "docker build -t ${DOCKER_IMAGE} ."
-                    }
+                    sh "docker build -t $IMAGE_NAME:latest ."
                 }
+            }
+        }
+
+        stage('Run Postgres') {
+            steps {
+                // Run Postgres container in background
+                sh '''
+                    docker run -d \
+                        --name $POSTGRES_CONTAINER \
+                        -e POSTGRES_DB=$POSTGRES_DB \
+                        -e POSTGRES_USER=$POSTGRES_USER \
+                        -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+                        -p 5432:5432 \
+                        postgres:13
+                '''
+            }
+        }
+
+        stage('Run Flask App') {
+            steps {
+                sh '''
+                    docker run -d \
+                        --name $CONTAINER_NAME \
+                        --link $POSTGRES_CONTAINER:postgres-db \
+                        -e POSTGRES_HOST=postgres-db \
+                        -e POSTGRES_DB=$POSTGRES_DB \
+                        -e POSTGRES_USER=$POSTGRES_USER \
+                        -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+                        -p 5000:5000 \
+                        $IMAGE_NAME:latest
+                '''
             }
         }
 
         stage('Run Tests') {
             steps {
-                script {
-                    sh """
-                        docker run --rm \
-                        -e POSTGRES_HOST=postgres-db \
-                        -e POSTGRES_DB=app_db \
-                        -e POSTGRES_USER=admin \
-                        -e POSTGRES_PASSWORD=admin \
-                        ${DOCKER_IMAGE} \
-                        pytest tests/
-                    """
-                }
-            }
-        }
-
-        stage('Deploy') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
-            steps {
-                echo "🚀 Deploying the application (this is a placeholder)."
-                // Add actual deployment logic here (e.g., docker-compose, kubectl, SCP, etc.)
+                sh "docker exec $CONTAINER_NAME pytest"
             }
         }
     }
 
     post {
         always {
-            echo "🧹 Cleaning up..."
-        }
-        success {
-            echo "✅ Build succeeded!"
-        }
-        failure {
-            echo "❌ Pipeline failed."
+            echo '🧹 Cleaning up containers...'
+            sh '''
+                docker rm -f $CONTAINER_NAME || true
+                docker rm -f $POSTGRES_CONTAINER || true
+            '''
         }
     }
 }
