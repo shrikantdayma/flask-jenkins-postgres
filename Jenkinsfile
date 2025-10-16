@@ -62,6 +62,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 echo "Running unit tests inside Flask container..."
+                // Removed backslashes in the sh block to avoid Groovy parser error
                 sh '''
                     docker run --rm \
                         --network ${NETWORK_NAME} \
@@ -79,12 +80,13 @@ pipeline {
         stage('Deploy Flask App') {
             steps {
                 echo "Deploying Flask app container..."
+                // Removed backslashes in the sh block to avoid Groovy parser error
                 sh '''
                     # Stop/Remove existing container
                     docker rm -f ${APP_CONTAINER} || true
                     docker run -d \
                         --name ${APP_CONTAINER} \
-                        --network ${NETWORK_NAME} \  // <-- **FINAL CRITICAL FIX:** Ensures hostname resolution works
+                        --network ${NETWORK_NAME} \
                         -e POSTGRES_HOST=${DB_CONTAINER} \
                         -e POSTGRES_DB=${POSTGRES_DB} \
                         -e POSTGRES_USER=${POSTGRES_USER} \
