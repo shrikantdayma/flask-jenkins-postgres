@@ -14,7 +14,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git 'https://github.com/shrikantdayma/flask-jenkins-postgres'
+                git branch: 'main', url: 'https://github.com/shrikantdayma/flask-jenkins-postgres'
             }
         }
 
