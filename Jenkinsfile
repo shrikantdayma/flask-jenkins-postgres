@@ -2,20 +2,32 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "flask-postgres-app"
+        IMAGE_NAME = 'flask-postgres-app'
+        DOCKER_TAG = 'latest'
+        DOCKER_IMAGE = "${IMAGE_NAME}:${DOCKER_TAG}"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
-                git 'https://github.com/shrikantdayma/flask-jenkins-postgres'
+                // Explicit Git checkout to avoid branch issues
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/shrikantdayma/flask-jenkins-postgres'
+                    ]]
+                ])
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh "docker build -t ${IMAGE_NAME} ."
+                dir('app') {
+                    script {
+                        sh "docker build -t ${DOCKER_IMAGE} ."
+                    }
                 }
             }
         }
@@ -23,47 +35,39 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh '''
-                        docker run --rm \
-                            -e POSTGRES_HOST=localhost \
-                            -e POSTGRES_DB=app_db \
-                            -e POSTGRES_USER=admin \
-                            -e POSTGRES_PASSWORD=admin \
-                            ${IMAGE_NAME} \
-                            pytest tests
-                    '''
-                }
-            }
-        }
-
-        // Optional: Push Docker image to Docker Hub
-        /*
-        stage('Push Image') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
-                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                        docker tag ${IMAGE_NAME} your-dockerhub-username/${IMAGE_NAME}
-                        docker push your-dockerhub-username/${IMAGE_NAME}
+                        docker run --rm \
+                        -e POSTGRES_HOST=postgres-db \
+                        -e POSTGRES_DB=app_db \
+                        -e POSTGRES_USER=admin \
+                        -e POSTGRES_PASSWORD=admin \
+                        ${DOCKER_IMAGE} \
+                        pytest tests/
                     """
                 }
             }
         }
-        */
 
         stage('Deploy') {
+            when {
+                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
+            }
             steps {
-                echo 'Deploy stage (add your script here)'
+                echo "🚀 Deploying the application (this is a placeholder)."
+                // Add actual deployment logic here (e.g., docker-compose, kubectl, SCP, etc.)
             }
         }
     }
 
     post {
+        always {
+            echo "🧹 Cleaning up..."
+        }
         success {
-            echo '✅ Pipeline succeeded!'
+            echo "✅ Build succeeded!"
         }
         failure {
-            echo '❌ Pipeline failed.'
+            echo "❌ Pipeline failed."
         }
     }
 }
