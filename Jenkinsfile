@@ -2,89 +2,69 @@ pipeline {
     agent any
 
     environment {
-        POSTGRES_HOST = "postgres-db"
-        POSTGRES_DB   = "app_db"
-        POSTGRES_USER = "admin"
-        POSTGRES_PASSWORD = "admin"
-        DOCKER_IMAGE = "flask-postgres-app"
-        FLASK_CONTAINER = "flask-app"
+        IMAGE_NAME = "flask-postgres-app"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git 'https://github.com/shrikantdayma/flask-jenkins-postgres'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build(env.DOCKER_IMAGE)
+                    sh "docker build -t ${IMAGE_NAME} ."
                 }
             }
         }
 
         stage('Run Tests') {
             steps {
-                // Use a Docker container to run tests, mounting code
-                sh '''
-                    docker run --rm \
-                        -e POSTGRES_HOST=${POSTGRES_HOST} \
-                        -e POSTGRES_DB=${POSTGRES_DB} \
-                        -e POSTGRES_USER=${POSTGRES_USER} \
-                        -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
-                        ${DOCKER_IMAGE} pytest app/tests
-                '''
+                script {
+                    sh '''
+                        docker run --rm \
+                            -e POSTGRES_HOST=localhost \
+                            -e POSTGRES_DB=app_db \
+                            -e POSTGRES_USER=admin \
+                            -e POSTGRES_PASSWORD=admin \
+                            ${IMAGE_NAME} \
+                            pytest tests
+                    '''
+                }
             }
         }
 
-        stage('Deploy') {
+        // Optional: Push Docker image to Docker Hub
+        /*
+        stage('Push Image') {
             steps {
-                script {
-                    // Stop existing container if running
-                    sh "docker run --rm ... flask-postgres-app pytest tests
- || true"
-                    // Run app container
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh """
-                        docker run -d \
-                          --network app-network \
-                          --name ${FLASK_CONTAINER} \
-                          -e POSTGRES_HOST=${POSTGRES_HOST} \
-                          -e POSTGRES_DB=${POSTGRES_DB} \
-                          -e POSTGRES_USER=${POSTGRES_USER} \
-                          -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
-                          -p 5000:5000 \
-                          ${DOCKER_IMAGE}
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker tag ${IMAGE_NAME} your-dockerhub-username/${IMAGE_NAME}
+                        docker push your-dockerhub-username/${IMAGE_NAME}
                     """
                 }
+            }
+        }
+        */
+
+        stage('Deploy') {
+            steps {
+                echo 'Deploy stage (add your script here)'
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline succeeded!"
+            echo '✅ Pipeline succeeded!'
         }
         failure {
-            echo "Pipeline failed!"
+            echo '❌ Pipeline failed.'
         }
-    }
-}
-post {
-    success {
-        slackSend(
-            color: "good",
-            message: "✅ Pipeline *${env.JOB_NAME}* #${env.BUILD_NUMBER} succeeded: ${env.BUILD_URL}",
-            webhookUrl: "${SLACK_WEBHOOK_URL}"
-        )
-    }
-    failure {
-        slackSend(
-            color: "danger",
-            message: "❌ Pipeline *${env.JOB_NAME}* #${env.BUILD_NUMBER} failed: ${env.BUILD_URL}",
-            webhookUrl: "${SLACK_WEBHOOK_URL}"
-        )
     }
 }
 
