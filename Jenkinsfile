@@ -80,7 +80,7 @@ stages {
 
             echo '🗄️ Starting PostgreSQL container...'
 
-            // IMPORTANT: Removed line continuation backslashes (\)
+            // Command uses single line to avoid Groovy backslash syntax error
 
             sh '''
 
@@ -106,7 +106,7 @@ stages {
 
             echo '🧪 Running unit tests...'
 
-            // IMPORTANT: Removed line continuation backslashes (\)
+            // Command uses single line to avoid Groovy backslash syntax error
 
             sh '''
 
@@ -126,7 +126,7 @@ stages {
 
             echo '🚀 Deploying Flask app container...'
 
-            // IMPORTANT: Removed line continuation backslashes (\)
+            // Command uses single line and includes the crucial --network flag
 
             sh '''
 
