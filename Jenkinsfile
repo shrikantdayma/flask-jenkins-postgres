@@ -1,77 +1,48 @@
 pipeline {
     agent any
-
+    
+    // Set environment variables for Docker image and Test Runner
     environment {
+        // Build image will be tagged with the build number
         IMAGE_NAME = "flask-postgres-app"
-        CONTAINER_NAME = "flask-postgres-app"
-        POSTGRES_CONTAINER = "postgres-db"
-        POSTGRES_DB = "app_db"
-        POSTGRES_USER = "admin"
-        POSTGRES_PASSWORD = "admin"
+        TAG_NAME = "${env.BUILD_NUMBER}"
     }
 
     stages {
-
-        stage('Checkout') {
+        stage('Declarative: Checkout SCM') {
             steps {
-                git branch: 'main', url: 'https://github.com/shrikantdayma/flask-jenkins-postgres'
+                // Initial checkout is done automatically by Declarative Pipeline
+                // Adding a placeholder step for clarity
+                echo 'Checking out source code...'
             }
         }
-
+        
         stage('Build Docker Image') {
             steps {
-                dir('app') {
-                    sh "docker build -t $IMAGE_NAME:latest ."
+                script {
+                    // Fix: We run this from the repo root.
+                    // -f app/Dockerfile: specifies the Dockerfile's location
+                    // app: sets the build context to the 'app' directory, which is needed for 'COPY' commands inside the Dockerfile
+                    sh "docker build -t ${IMAGE_NAME}:${TAG_NAME} -f app/Dockerfile app"
                 }
-            }
-        }
-
-        stage('Run Postgres') {
-            steps {
-                // Run Postgres container in background
-                sh '''
-                    docker run -d \
-                        --name $POSTGRES_CONTAINER \
-                        -e POSTGRES_DB=$POSTGRES_DB \
-                        -e POSTGRES_USER=$POSTGRES_USER \
-                        -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-                        -p 5432:5432 \
-                        postgres:13
-                '''
-            }
-        }
-
-        stage('Run Flask App') {
-            steps {
-                sh '''
-                    docker run -d \
-                        --name $CONTAINER_NAME \
-                        --link $POSTGRES_CONTAINER:postgres-db \
-                        -e POSTGRES_HOST=postgres-db \
-                        -e POSTGRES_DB=$POSTGRES_DB \
-                        -e POSTGRES_USER=$POSTGRES_USER \
-                        -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-                        -p 5000:5000 \
-                        $IMAGE_NAME:latest
-                '''
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh "docker exec $CONTAINER_NAME pytest"
+                script {
+                    // Fix from previous errors: Test runner needs to use the correct directory.
+                    // The Dockerfile WORKDIR is /app, and files were copied relative to the context (app/).
+                    // Therefore, tests are at /app/tests inside the container.
+                    sh "docker run --rm -e POSTGRES_HOST=postgres-db -e POSTGRES_DB=app_db -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin ${IMAGE_NAME}:${TAG_NAME} pytest tests"
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "Deployment logic goes here..."
             }
         }
     }
-
-    post {
-        always {
-            echo '🧹 Cleaning up containers...'
-            sh '''
-                docker rm -f $CONTAINER_NAME || true
-                docker rm -f $POSTGRES_CONTAINER || true
-            '''
-        }
-    }
 }
-
