@@ -1,0 +1,10 @@
+FROM postgres:14
+
+COPY backup_scripts/backup_db.py /usr/local/bin/backup_db.py
+
+RUN apt-get update && apt-get install -y python3 python3-pip
+
+RUN pip3 install --no-cache-dir
+
+ENTRYPOINT ["python3", "/usr/local/bin/backup_db.py"]
+
